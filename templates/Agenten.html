@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang='de'>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Agenten verwalten</title><link rel='stylesheet' href='style.css'></head>
+<body>
+  <header><h1>Agenten Verwaltung</h1></header>
+  <main>
+    <button id='loadAgents'>Agentenliste laden</button>
+    <div id='agentsList'></div>
+    <nav>
+      <ul>
+        <li><a href='Agenten/agenten_beiten.html'>Agenten bearbeiten/löschen</a></li>
+        <li><a href='Agenten/agenten_hinzufuegen_loeschen.html'>Neuen Agenten hinzufügen</a></li>
+      </ul>
+    </nav>
+    <script>
+      document.getElementById('loadAgents').addEventListener('click', async () => {
+        try {
+          const res = await fetch('/agents/');
+          const agents = await res.json();
+          let html = '<ul>';
+          agents.forEach(a => { html += `<li>ID: ${a.agent_id} - Name: ${a.name}</li>`; });
+          html += '</ul>';
+          document.getElementById('agentsList').innerHTML = html;
+        } catch (err) { document.getElementById('agentsList').innerText = 'Fehler: ' + err; }
+      });
+    </script>
+  </main>
+  <footer><p>&copy; 2025 Think Tank System</p></footer>
+</body>
+</html>

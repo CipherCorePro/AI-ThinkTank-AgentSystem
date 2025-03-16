@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KI-Agenten Think Tank</title>
+    <link rel="stylesheet" href="./static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1>KI-Think Tank</h1>
+		  <nav>
+    <ul>
+      <li><a href='Agenten.html'>Agenten verwalten</a></li>
+      <li><a href='API_Server/grundeinstellungen.html'>Globale Einstellungen</a></li>
+      <li><a href='Websuche/ki_websuche.html'>Websuche</a></li>
+      <li><a href='Upload/ki_fileanalyse.html'>Fileanalyse</a></li>
+    </ul>
+  </nav>
+        <div class="form-group">
+            <label for="agentenSelect">Wähle Agenten:</label>
+            <select id="agentenSelect" multiple>
+                <option value="">Agenten werden geladen...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="frage">Deine Frage (Für Websuche: "web suchen: Frage eingeben"):</label>
+            <textarea id="frage" rows="6" cols="60"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="rounds">Anzahl der Runden (max. 10):</label>
+            <input type="number" id="rounds" value="3" min="1" max="10">
+        </div>
+
+        <button onclick="frageSenden()" class="send-button">Think Tank starten</button>
+        <button onclick="anweisungSenden()" class="send-button">Neue Anweisung senden</button>
+
+        <h2>Diskussionsverlauf:</h2>
+        <div id="antwort" class="response-area"></div>
+    </div>
+
+    <script>
+    let aktuelleSitzung = null;  // Speichert die session_id für weitere Anweisungen
+
+    // Lade Agenten dynamisch beim Start
+    window.onload = async function() {
+        const agentenSelect = document.getElementById('agentenSelect');
+        agentenSelect.innerHTML = '<option>Agenten werden geladen...</option>';
+
+        try {
+            const response = await fetch('http://localhost:8000/agents/');
+            const agenten = await response.json();
+            agentenSelect.innerHTML = '';
+
+            if (agenten.length === 0) {
+                agentenSelect.innerHTML = '<option>Keine Agenten verfügbar</option>';
+                return;
+            }
+
+            agenten.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.agent_id;
+                option.textContent = agent.name;
+                agentenSelect.appendChild(option);
+            });
+
+        } catch (error) {
+            console.error('Fehler:', error);
+            agentenSelect.innerHTML = '<option>Fehler beim Laden der Agenten</option>';
+        }
+    }
+
+    // Think Tank starten (Neue Sitzung)
+    async function frageSenden() {
+        const agentenSelect = document.getElementById('agentenSelect');
+        const agent_ids = Array.from(agentenSelect.selectedOptions).map(option => option.value);
+        const frage = document.getElementById('frage').value;
+        const rounds = parseInt(document.getElementById('rounds').value);
+        const antwortDiv = document.getElementById('antwort');
+
+        if (agent_ids.length < 2) {
+            alert("Bitte wähle mindestens zwei Agenten!");
+            return;
+        }
+        if (!frage) {
+            alert("Bitte stelle eine Frage!");
+            return;
+        }
+
+        antwortDiv.innerHTML = "<strong>Diskussion startet...</strong><br>";
+
+        const requestBody = {
+            agent_ids: agent_ids,
+            query: frage,
+            rounds: rounds
+        };
+
+        try {
+            const response = await fetch('http://localhost:8000/interact_think_tank/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+            aktuelleSitzung = data.session_id;  // Sitzung merken
+            displayAntwort(data, antwortDiv);
+
+        } catch (error) {
+            antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error;
+        }
+    }
+
+    // Neue Anweisung während einer laufenden Sitzung senden
+    async function anweisungSenden() {
+        if (!aktuelleSitzung) {
+            alert("Es gibt keine aktive Sitzung! Starte erst eine neue Think Tank Diskussion.");
+            return;
+        }
+
+        const frage = document.getElementById('frage').value;
+        if (!frage) {
+            alert("Bitte gib eine neue Anweisung ein!");
+            return;
+        }
+
+        const antwortDiv = document.getElementById('antwort');
+        antwortDiv.innerHTML += "<strong>Neue Anweisung wird verarbeitet...</strong><br>";
+
+        const requestBody = {
+            session_id: aktuelleSitzung,
+            query: frage
+        };
+
+        try {
+            const response = await fetch('http://localhost:8000/interact_think_tank/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+            displayAntwort(data, antwortDiv);
+
+        } catch (error) {
+            antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error;
+        }
+    }
+
+    // Antwort anzeigen (inklusive Code-Validierung)
+    function displayAntwort(data, antwortDiv) {
+        let discussionText = "<strong>Diskussionsverlauf:</strong><br><br>";
+
+        data.history.forEach((entry, index) => {
+            if (entry.role === "user") {
+                discussionText += `<b>👤 Du:</b> ${entry.response}<br><br>`;
+            } else {
+                discussionText += `🔹 <b>Agent ${entry.agent_id}:</b> ${entry.response}<br><br>`;
+            }
+        });
+
+        // Code-Validierung: Falls Code angefordert, aber nicht geliefert wurde
+        if (data.error) {
+            discussionText += `<hr><strong style="color:red;">⚠️ Fehler:</strong> ${data.error}`;
+        } else {
+            discussionText += `<hr><strong>Finale Antwort:</strong> ${data.history[data.history.length - 1].response}`;
+        }
+
+        antwortDiv.innerHTML = discussionText;
+    }
+    </script>
+</body>
+</html>
