@@ -870,6 +870,7 @@ def create_test_suite():
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestLoadAgentRoles))  # Füge Test hinzu
 
     return suite
+    # Lade Agent-Rollen aus CSV-Dateien.  MUSS vor Orchestrator-Instanziierung erfolgen.
 load_agent_roles_from_csv()
     
     # Initialisierung des Orchestrators NACH dem Laden der Rollen
@@ -877,7 +878,6 @@ orchestrator = Orchestrator()
 # App Start Function
 def start_app():
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    # Lade Agent-Rollen aus CSV-Dateien.  MUSS vor Orchestrator-Instanziierung erfolgen.
 
 # Main Function to Run Tests and Start App
 if __name__ == "__main__":
