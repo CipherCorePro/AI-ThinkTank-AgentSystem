@@ -1,3 +1,4 @@
+# API SERVER
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -38,6 +39,8 @@ from enum import Enum
 import asyncio
 from google import genai
 from google.genai.types import GenerateContentConfig, Tool, GoogleSearch
+import csv  # Importiere csv hier
+
 
 # Logging Konfiguration
 logging.basicConfig(filename="think_tank.log", level=logging.INFO,
@@ -240,7 +243,7 @@ class RateLimiter:
             if sleep_time > 0:
                 time.sleep(sleep_time)
             self.allowed_calls = self.calls_per_period
-            self.last_reset = time.time()
+            self.last_reset = current_time()
 
         self.allowed_calls -= 1
 
@@ -359,38 +362,39 @@ async def upload_file_endpoint(file: UploadFileModel):  # Validierung durch Pyda
         log_message(f"Fehler beim Hochladen der Datei: {e}\n{traceback.format_exc()}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Fehler beim Hochladen der Datei: {e}")
 
-# Removed execute python code for security reasons
-
 @app.get("/testendpoint/")
 async def test():
     return JSONResponse({"answer": 1})
 
-# Agenten-Rollen als Enum
+# ENUM Handling
 class AgentRole(Enum):
-    ANALYST = "Analyst"
-    STRATEGIST = "Stratege"
-    INNOVATOR = "Innovator"
-    CRITIC = "Kritiker"
-    ETHICAL_GUARDIAN = "Ethischer Aufpasser"
-    SUMMARIZER = "Summarizer"  # Neuer Agent für Zusammenfassungen
-    VERIFIER = "Verifizierer"  # Agent zur Faktenprüfung
-    OPTIMIERER = "Optimierer"  # Agent zum Optimieren von Code und Prompts
-    TECHNOLOGY_SCOUT = "Technologie Scout"  # Agent für neue Technologien
-    DEVELOPER = "Entwickler"
-    ENGINEER = "Ingenieur"
-    RESEARCHER = "Forscher"
-    ARCHITECT = "Architekt"
-    TESTER = "Tester"
-    ADMINISTRATOR = "Administrator"
-    WRITER = "Schriftsteller"
-    MANAGER = "Manager"
-    DESIGNER = "Designer"
-    SUPPORT = "Support"
-    PROGRAMMING = "Programmierung"
-    CONSULTANT = "Berater"
-    BANKER = "Banker"
-    ADVISOR = "Ratgeber"
-    SPECIALIST = "Spezialist"
+    ANALYST = "Analyst"  # Standardrolle hinzufügen
+
+
+def load_agent_roles_from_csv(directory: str = "Enums") -> None:
+    """
+    Lädt Agenten-Rollen aus CSV-Dateien im angegebenen Verzeichnis.
+    Jede CSV-Datei sollte eine Spalte mit Rollennamen enthalten.
+    """
+    if not os.path.isdir(directory):
+        logging.error(f"Verzeichnis {directory} nicht gefunden.")
+        return
+
+    for filename in os.listdir(directory):
+        if filename.endswith(".csv"):
+            filepath = os.path.join(directory, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8") as file:
+                    # CSV-Datei einlesen (Annahme: Nur eine Spalte mit den Rollen)
+                    reader = csv.reader(file)
+                    for row in reader:
+                        role_name = row[0].strip()  # Entferne Leerzeichen
+                        if role_name:  # Stelle sicher, dass es keine leeren Einträge gibt
+                            # Dynamisch Enum-Member hinzufügen
+                            setattr(AgentRole, role_name.upper().replace(" ", "_"), role_name)
+                logging.info(f"Rollen aus {filename} geladen.")
+            except Exception as e:
+                logging.error(f"Fehler beim Laden von Rollen aus {filename}: {e}")
 
 # Cache-Funktionen
 def generate_cache_key(agent_name: str, knowledge: Dict, history: List, query: str) -> str:
@@ -440,8 +444,8 @@ class Agent(BaseModel):
     temperature: float = settings.DEFAULT_TEMPERATURE
     model_name: str = "gemini-2.0-flash"
     expertise_fields: List[str] = []
-    role: AgentRole = AgentRole.ANALYST
-    tools: List[Dict] = []  # create_tool_definitions()
+    role: AgentRole = AgentRole.ANALYST  # Standardrolle verwenden
+    tools: List[Dict] = []
     knowledge: Dict = {}
     caching: bool = True
 
@@ -449,7 +453,7 @@ class Agent(BaseModel):
         validate_api_key()
 
         # Wenn die Anfrage eine Websuche erfordert, führen wir sie aus
-        if "web suchen" in query.lower():  # Einfache Bedingung für eine Websuche
+        if "web suchen" in query.lower():
             search_query = query.replace("web suchen", "").strip()
             web_results = await google_search(search_query)
             return f"Hier sind die Ergebnisse aus der Google-Suche: \n{web_results}"
@@ -463,7 +467,6 @@ class Agent(BaseModel):
 
         try:
             # Historische Antworten für Kontext in den Prompt aufnehmen
-            # WICHTIG: history ist jetzt der *relevante* Verlauf, nicht alles.
             discussion_context = "\n".join(
                 [f"{resp['agent_id'] if 'agent_id' in resp else 'User'}: {resp['response']}" for resp in history]
             )
@@ -472,7 +475,7 @@ class Agent(BaseModel):
                 f"{self.system_prompt}\n"
                 f"Aktuelle Diskussion:\n{discussion_context}\n"
                 f"Dein Beitrag zur Diskussion: {query}\n"
-                f"Formuliere eine Antwort, die auf die letzten Aussagen und Benutzereingaben reagiert, und entweder zustimmt, hinterfragt, kritisiert oder neue Anweisungen integriert." # WICHTIG: Prompt angepasst.
+                f"Formuliere eine Antwort, die auf die letzten Aussagen und Benutzereingaben reagiert, und entweder zustimmt, hinterfragt, kritisiert oder neue Anweisungen integriert."
             )
 
             # Anfrage an das Modell
@@ -557,7 +560,7 @@ class Orchestrator:
     def __init__(self, config_file: str = "programming_agent_config.json"):
         self.agents = {}
         self.global_knowledge = {}
-        self.blockchain = []  # Blockchain initialisieren
+        self.blockchain = []
         self.load_agents_from_config(config_file)
 
     def load_agents_from_config(self, config_file: str):
@@ -566,11 +569,15 @@ class Orchestrator:
                 agents_data = json.load(f)
 
             for agent_data in agents_data:
+                role_name = agent_data["role"].upper().replace(" ", "_")
+                # Verwende getattr mit AgentRole als Standardwert.
+                role = getattr(AgentRole, role_name, AgentRole.ANALYST)
+
                 agent = Agent(
                     name=agent_data["name"],
                     description=agent_data["description"],
                     system_prompt=agent_data["system_prompt"],
-                    role=AgentRole[agent_data["role"]],
+                    role=role,
                     temperature=agent_data.get("temperature", settings.DEFAULT_TEMPERATURE),
                     model_name=agent_data.get("model_name", "gemini-2.0-flash"),
                     expertise_fields=agent_data.get("expertise_fields", []),
@@ -583,6 +590,7 @@ class Orchestrator:
         except Exception as e:
             logging.error(f"Fehler beim Laden der Agenten-Konfiguration: {e}")
             print(f"Fehler beim Laden der Agenten-Konfiguration: {e}")
+
 
     def add_agent(self, agent: Agent):
         """Fügt einen neuen Agenten zum Orchestrator hinzu."""
@@ -670,27 +678,7 @@ async def process_file(filename: str, instructions: str) -> str:
     except Exception as e:
         log_message(f"Fehler beim Verarbeiten der Datei '{filename}': {e}\n{traceback.format_exc()}", level=logging.ERROR)
         return f"Fehler beim Verarbeiten der Datei '{filename}': {e}"
-
-# Test-Agenten - Zur Veranschaulichung hartkodiert
-agent1 = Agent(
-    name="Experte für alternative Fakten",
-    description="Kennt sich sehr gut mit alternativen Fakten aus",
-    system_prompt="Du bist ein Experte für Verschwörungstheorien.",
-    role=AgentRole.ANALYST
-)
-
-agent2 = Agent(
-    name="Faktenprüfer",
-    description="Spezialist für Faktenprüfung und Aufklärung",
-    system_prompt="Du bist ein Faktenprüfer und Experte für Desinformation.",
-    role=AgentRole.VERIFIER
-)
-
-# Initialisierung des Orchestrators
-orchestrator = Orchestrator()
-orchestrator.add_agent(agent1)
-orchestrator.add_agent(agent2)
-
+    
 # Hilfsfunktion zur Validierung der API-Schlüssel
 def validate_api_key():
     # Mock implementation for testing
@@ -818,7 +806,7 @@ def create_test_suite():
                 name="Test Agent",
                 description="Agent for testing purposes.",
                 system_prompt="You are a test agent.",
-                role=AgentRole.ANALYST
+                role=AgentRole.ANALYST  # Verwende eine Standard-Rolle
             )
             response = await agent.generate_response({}, [], "Test query")
             self.assertIsNotNone(response)
@@ -830,32 +818,81 @@ def create_test_suite():
                 name="Test Agent",
                 description="Agent for testing purposes.",
                 system_prompt="You are a test agent.",
-                role=AgentRole.ANALYST
+                role=AgentRole.ANALYST # Verwende eine Standard-Rolle
             )
             orchestrator.add_agent(agent)
             response = await orchestrator.process_request(agent.agent_id, "Test query")
             self.assertIsNotNone(response)
 
+
+    class TestLoadAgentRoles(unittest.TestCase):
+        def test_load_from_csv(self):
+            # Erstelle temporäres Verzeichnis und CSV-Dateien für den Test.
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Test-CSV-Datei 1
+                with open(os.path.join(temp_dir, "test1.csv"), "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["Role1"])
+                    writer.writerow(["Role 2"])
+
+                # Test-CSV-Datei 2 (mit Leerzeichen und gemischter Groß-/Kleinschreibung)
+                with open(os.path.join(temp_dir, "test2.csv"), "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["  Role3  "])
+                    writer.writerow(["roLE4"])
+
+                 # Leere Test-CSV-Datei
+                with open(os.path.join(temp_dir, "empty.csv"), "w", newline="") as f:
+                    pass # Leere Datei
+
+                # Datei, die keine CSV ist
+                with open(os.path.join(temp_dir, "not_a_csv.txt"), "w") as f:
+                    f.write("This is not a CSV file.")
+
+                # Lade Rollen
+                load_agent_roles_from_csv(temp_dir)
+
+                # Überprüfe, ob die Rollen korrekt geladen wurden.
+                self.assertTrue(hasattr(AgentRole, "ROLE1"))
+                self.assertTrue(hasattr(AgentRole, "ROLE_2"))
+                self.assertTrue(hasattr(AgentRole, "ROLE3"))
+                self.assertTrue(hasattr(AgentRole, "ROLE4"))
+
+                self.assertEqual(AgentRole.ROLE1.value, "Role1")
+                self.assertEqual(AgentRole.ROLE_2.value, "Role 2")
+                self.assertEqual(AgentRole.ROLE3.value, "Role3")
+                self.assertEqual(AgentRole.ROLE4.value, "roLE4") # Wert bleibt erhalten
+
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRateLimiter))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestAgent))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestOrchestrator))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestLoadAgentRoles))  # Füge Test hinzu
 
     return suite
-
+load_agent_roles_from_csv()
+    
+    # Initialisierung des Orchestrators NACH dem Laden der Rollen
+orchestrator = Orchestrator()
 # App Start Function
 def start_app():
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Lade Agent-Rollen aus CSV-Dateien.  MUSS vor Orchestrator-Instanziierung erfolgen.
 
 # Main Function to Run Tests and Start App
 if __name__ == "__main__":
+
+
     # Run the test suite.
     test_suite = create_test_suite()
     runner = unittest.TextTestRunner()
-    runner.run(test_suite)
+    result = runner.run(test_suite)
 
-    # Start the FastAPI app.
-    start_app()
+    # Start the FastAPI app *nur*, wenn die Tests erfolgreich waren.
+    if result.wasSuccessful():
+        start_app()
+    else:
+        print("Tests failed.  App will not start.")
 
 # NEUE KLASSE: ThinkTankSession
 class ThinkTankSession:
