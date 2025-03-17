@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -11,14 +10,21 @@
 <body>
     <div class="container">
         <h1>KI-Think Tank</h1>
-		  <nav>
-    <ul>
-      <li><a href='Agenten.html'>Agenten verwalten</a></li>
-      <li><a href='API_Server/grundeinstellungen.html'>Globale Einstellungen</a></li>
-      <li><a href='Websuche/ki_websuche.html'>Websuche</a></li>
-      <li><a href='Upload/ki_fileanalyse.html'>Fileanalyse</a></li>
-    </ul>
-  </nav>
+        <nav>
+            <ul>
+                <li><a href='Agenten.html'>Agenten verwalten</a></li>
+                <li><a href='API_Server/grundeinstellungen.html'>Globale Einstellungen</a></li>
+                <li><a href='Websuche/ki_websuche.html'>Websuche</a></li>
+                <li><a href='Upload/ki_fileanalyse.html'>Fileanalyse</a></li>
+            </ul>
+        </nav>
+        
+        <!-- Breite-Eingabe für das Dropdown -->
+        <div class="form-group">
+            <label for="dropdownWidth">Dropdown Breite (in px):</label>
+            <input type="number" id="dropdownWidth" value="300" min="100" max="1000" oninput="adjustDropdownWidth()">
+        </div>
+
         <div class="form-group">
             <label for="agentenSelect">Wähle Agenten:</label>
             <select id="agentenSelect" multiple>
@@ -46,6 +52,13 @@
     <script>
     let aktuelleSitzung = null;  // Speichert die session_id für weitere Anweisungen
 
+    // Funktion zum Anpassen der Breite des Dropdowns
+    function adjustDropdownWidth() {
+        const dropdown = document.getElementById('agentenSelect');
+        const newWidth = document.getElementById('dropdownWidth').value;
+        dropdown.style.width = newWidth + 'px'; // Setze die neue Breite des Dropdowns
+    }
+
     // Lade Agenten dynamisch beim Start
     window.onload = async function() {
         const agentenSelect = document.getElementById('agentenSelect');
@@ -64,7 +77,14 @@
             agenten.forEach(agent => {
                 const option = document.createElement('option');
                 option.value = agent.agent_id;
-                option.textContent = agent.name;
+                
+                // Kombiniere den Namen, die Beschreibung und die Expertise-Felder
+                const expertiseFields = agent.expertise_fields && agent.expertise_fields.length > 0 
+                    ? agent.expertise_fields.join(', ')  // Expertise-Felder zusammenfügen
+                    : 'Keine Expertise-Felder verfügbar';  // Wenn keine Expertise-Felder existieren
+                
+                // Setze den Textinhalt der Option: Name, Beschreibung und Expertise
+                option.textContent = `${agent.name} - ${agent.description} | Expertise: ${expertiseFields}`;
                 agentenSelect.appendChild(option);
             });
 
