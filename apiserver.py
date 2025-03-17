@@ -53,14 +53,14 @@ class Settings(BaseSettings):
     DEFAULT_TOP_P: float = 0.95
     DEFAULT_TOP_K: int = 40
     DEFAULT_MAX_OUTPUT_TOKENS: int = 10240
-    API_CALL_INTERVAL: int = 25
-    AGENT_CONFIG_FILE: str = "programming_agent_config.json"
+    API_CALL_INTERVAL: int = 55
+    AGENT_CONFIG_FILE: str = "agent_config.json"
     LOG_FILE: str = "think_tank.log"
     DEFAULT_PROMPT_TEMPLATE: str = "{system_prompt}\nWissen: {knowledge}\nBisheriger Verlauf: {history}\nAktuelle Anfrage: {query}"
     MAX_CONCURRENT_REQUESTS: int = 5
     SANDBOX_TIMEOUT: int = 15
-    WEB_CRAWLING_TIMEOUT: int = 15
-    MAX_URLS_TO_CRAWL: int = 5
+    WEB_CRAWLING_TIMEOUT: int = 25
+    MAX_URLS_TO_CRAWL: int = 15
     MAX_FILE_SIZE_KB: int = 1024
     FILE_UPLOAD_DIR: str = "uploads"
     CACHE_DIR: str = "cache"
@@ -557,7 +557,7 @@ def validate_chain(chain: List[Dict]) -> bool:
     return True
 
 class Orchestrator:
-    def __init__(self, config_file: str = "programming_agent_config.json"):
+    def __init__(self, config_file: str = "agent_config.json"):
         self.agents = {}
         self.global_knowledge = {}
         self.blockchain = []
@@ -649,8 +649,12 @@ def get_orchestrator():
 @app.get("/agents/")
 async def get_agents():
     agents = orchestrator.get_all_agents()
-    return [{"agent_id": agent.agent_id, "name": agent.name} for agent in agents]
-
+    # Debug-Ausgabe: Alle Agenten und deren Expertise-Felder im Log ausgeben
+    agent_list = [{"agent_id": agent.agent_id, "name": agent.name, "description": agent.description, "expertise_fields": agent.expertise_fields} for agent in agents]
+    logging.info(f"Agents Data: {agent_list}")
+    return agent_list
+    
+    
 # Hilfsfunktionen
 async def execute_python_code(code: str) -> str:
     return "Ausführung von Python-Code ist aus Sicherheitsgründen deaktiviert."
