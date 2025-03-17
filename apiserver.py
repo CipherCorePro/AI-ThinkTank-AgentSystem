@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = secrets.token_urlsafe(32)
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
-    MAX_DISCUSSION_ROUNDS: int = 10  # Begrenzung für maximale Runden
+    MAX_DISCUSSION_ROUNDS: int = 30  # Begrenzung für maximale Runden
 
     @field_validator('ENCRYPTION_KEY')
     def encryption_key_must_be_set_or_generated(cls, v: Optional[str]) -> str:
@@ -916,7 +916,7 @@ async def interact_think_tank(request: InteractThinkTankRequest):
         session = sessions[request.session_id]
     else:
         # Neue Sitzung starten
-        if not request.agent_ids or len(request.agent_ids) < 2:
+        if not request.agent_ids or len(request.agent_ids) < 1:
             raise HTTPException(status_code=400, detail="Mindestens zwei Agenten für eine neue Sitzung benötigt.")
         if request.rounds > settings.MAX_DISCUSSION_ROUNDS:
             raise HTTPException(status_code=400, detail=f"Maximal {settings.MAX_DISCUSSION_ROUNDS} Runden erlaubt.")
