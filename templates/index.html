@@ -1,197 +1,333 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KI-Agenten Think Tank</title>
-    <link rel="stylesheet" href="./static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KI-Agenten Think Tank</title>
+  <link rel="stylesheet" href="./static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <h1>KI-Think Tank</h1>
-        <nav>
-            <ul>
-                <li><a href='Agenten.html'>Agenten verwalten</a></li>
-                <li><a href='API_Server/grundeinstellungen.html'>Globale Einstellungen</a></li>
-                <li><a href='Websuche/ki_websuche.html'>Websuche</a></li>
-                <li><a href='Upload/ki_fileanalyse.html'>Fileanalyse</a></li>
-            </ul>
-        </nav>
-        
-        <!-- Breite-Eingabe für das Dropdown -->
-        <div class="form-group">
-            <label for="dropdownWidth">Dropdown Breite (in px):</label>
-            <input type="number" id="dropdownWidth" value="300" min="100" max="1000" oninput="adjustDropdownWidth()">
-        </div>
+  <div class="container">
+    <h1>KI-Think Tank</h1>
+    <nav>
+      <ul>
+        <li><a href="Agenten.html">Agenten verwalten</a></li>
+        <li><a href="API_Server/grundeinstellungen.html">Globale Einstellungen</a></li>
+        <li><a href="Websuche/ki_websuche.html">Websuche</a></li>
+        <li><a href="Upload/ki_fileanalyse.html">Fileanalyse</a></li>
+      </ul>
+    </nav>
 
-        <div class="form-group">
-            <label for="agentenSelect">Wähle Agenten:</label>
-            <select id="agentenSelect" multiple>
-                <option value="">Agenten werden geladen...</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="frage">Deine Frage (Für Websuche: "web suchen: Frage eingeben"):</label>
-            <textarea id="frage" rows="6" cols="60"></textarea>
-        </div>
-
-        <div class="form-group">
-            <label for="rounds">Anzahl der Runden (max. 10):</label>
-            <input type="number" id="rounds" value="3" min="1" max="30">
-        </div>
-
-        <button onclick="frageSenden()" class="send-button">Think Tank starten</button>
-        <button onclick="anweisungSenden()" class="send-button">Neue Anweisung senden</button>
-
-        <h2>Diskussionsverlauf:</h2>
-        <div id="antwort" class="response-area"></div>
+    <!-- Dropdown Breite -->
+    <div class="form-group">
+      <label for="dropdownWidth">Dropdown Breite (in px):</label>
+      <input type="number" id="dropdownWidth" value="400" min="100" max="1000" oninput="adjustDropdownWidth(this.value)">
     </div>
 
-    <script>
-    let aktuelleSitzung = null;  // Speichert die session_id für weitere Anweisungen
+    <!-- Agentenauswahl -->
+    <div class="form-group">
+      <label for="agentenSelect">Wähle Agenten:</label>
+      <select id="agentenSelect" multiple>
+        <option value="">Agenten werden geladen...</option>
+      </select>
+    </div>
+
+    <!-- Fragentext -->
+    <div class="form-group">
+      <label for="frage">Deine Frage (Für Websuche: "web suchen: Frage eingeben"):</label>
+      <textarea id="frage" rows="6" cols="60"></textarea>
+    </div>
+
+    <!-- Rundenanzahl -->
+    <div class="form-group">
+      <label for="rounds">Anzahl der Runden (max. 30):</label>
+      <input type="number" id="rounds" value="3" min="1" max="30">
+    </div>
+
+    <!-- Button zum Starten der Sitzung -->
+    <button onclick="frageSenden()" class="send-button">Think Tank starten</button>
+
+    <!-- Folgeanweisung -->
+    <div class="form-group follow-up-group">
+      <label for="folgeFrage">Folgeanweisung:</label>
+      <textarea id="folgeFrage" rows="3" cols="60" placeholder="Hier Folgeanweisung eingeben (optional)"></textarea>
+      <button onclick="folgeAnweisungSenden()" class="send-button follow-up-button">Folgeanweisung senden</button>
+    </div>
+
+    <!-- Button zum Beenden der Sitzung -->
+    <div class="form-group">
+      <button onclick="beendeSitzung()" class="send-button" style="background-color:#c0392b;">Sitzung beenden</button>
+    </div>
+
+    <h2>Diskussionsverlauf:</h2>
+    <div id="antwort" class="response-area"></div>
+  </div>
+
+  <script>
+    // Globale Variablen für Sitzung und Polling
+    let aktuelleSitzung = null;
+    let pollingInterval = null;
 
     // Funktion zum Anpassen der Breite des Dropdowns
-    function adjustDropdownWidth() {
-        const dropdown = document.getElementById('agentenSelect');
-        const newWidth = document.getElementById('dropdownWidth').value;
-        dropdown.style.width = newWidth + 'px'; // Setze die neue Breite des Dropdowns
+    function adjustDropdownWidth(width) {
+      const dropdown = document.getElementById('agentenSelect');
+      if (dropdown) {
+        dropdown.style.width = width + 'px';
+      }
     }
 
-    // Lade Agenten dynamisch beim Start
+    // Agenten dynamisch laden
     window.onload = async function() {
-        const agentenSelect = document.getElementById('agentenSelect');
-        agentenSelect.innerHTML = '<option>Agenten werden geladen...</option>';
+      const agentenSelect = document.getElementById('agentenSelect');
+      if (!agentenSelect) {
+        console.error('Element mit der ID "agentenSelect" nicht gefunden.');
+        return;
+      }
+      agentenSelect.innerHTML = '<option>Agenten werden geladen...</option>';
+      adjustDropdownWidth(400);
 
-        try {
-            const response = await fetch('http://localhost:8000/agents/');
-            const agenten = await response.json();
-            agentenSelect.innerHTML = '';
-
-            if (agenten.length === 0) {
-                agentenSelect.innerHTML = '<option>Keine Agenten verfügbar</option>';
-                return;
-            }
-
-            agenten.forEach(agent => {
-                const option = document.createElement('option');
-                option.value = agent.agent_id;
-                
-                // Kombiniere den Namen, die Beschreibung und die Expertise-Felder
-                const expertiseFields = agent.expertise_fields && agent.expertise_fields.length > 0 
-                    ? agent.expertise_fields.join(', ')  // Expertise-Felder zusammenfügen
-                    : 'Keine Expertise-Felder verfügbar';  // Wenn keine Expertise-Felder existieren
-                
-                // Setze den Textinhalt der Option: Name, Beschreibung und Expertise
-                option.textContent = `${agent.name} - ${agent.description} | Expertise: ${expertiseFields}`;
-                agentenSelect.appendChild(option);
-            });
-
-        } catch (error) {
-            console.error('Fehler:', error);
-            agentenSelect.innerHTML = '<option>Fehler beim Laden der Agenten</option>';
+      try {
+        const response = await fetch('http://localhost:8000/agents/');
+        if (!response.ok) {
+          throw new Error(`HTTP-Fehler! Status: ${response.status}`);
         }
-    }
+        const agenten = await response.json();
+        agentenSelect.innerHTML = '';
 
-    // Think Tank starten (Neue Sitzung)
-    async function frageSenden() {
-        const agentenSelect = document.getElementById('agentenSelect');
-        const agent_ids = Array.from(agentenSelect.selectedOptions).map(option => option.value);
-        const frage = document.getElementById('frage').value;
-        const rounds = parseInt(document.getElementById('rounds').value);
-        const antwortDiv = document.getElementById('antwort');
-
-        if (agent_ids.length < 1) {
-            alert("Bitte wähle mindestens ein Agenten!");
-            return;
-        }
-        if (!frage) {
-            alert("Bitte stelle eine Frage!");
-            return;
+        if (agenten.length === 0) {
+          agentenSelect.innerHTML = '<option>Keine Agenten verfügbar</option>';
+          return;
         }
 
-        antwortDiv.innerHTML = "<strong>Diskussion startet...</strong><br>";
+        // Option für alle Agenten
+        const alleAgentenOption = document.createElement('option');
+        alleAgentenOption.value = 'alle';
+        alleAgentenOption.textContent = 'Alle Agenten auswählen';
+        agentenSelect.appendChild(alleAgentenOption);
 
-        const requestBody = {
-            agent_ids: agent_ids,
-            query: frage,
-            rounds: rounds
-        };
-
-        try {
-            const response = await fetch('http://localhost:8000/interact_think_tank/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
-            aktuelleSitzung = data.session_id;  // Sitzung merken
-            displayAntwort(data, antwortDiv);
-
-        } catch (error) {
-            antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error;
-        }
-    }
-
-    // Neue Anweisung während einer laufenden Sitzung senden
-    async function anweisungSenden() {
-        if (!aktuelleSitzung) {
-            alert("Es gibt keine aktive Sitzung! Starte erst eine neue Think Tank Diskussion.");
-            return;
-        }
-
-        const frage = document.getElementById('frage').value;
-        if (!frage) {
-            alert("Bitte gib eine neue Anweisung ein!");
-            return;
-        }
-
-        const antwortDiv = document.getElementById('antwort');
-        antwortDiv.innerHTML += "<strong>Neue Anweisung wird verarbeitet...</strong><br>";
-
-        const requestBody = {
-            session_id: aktuelleSitzung,
-            query: frage
-        };
-
-        try {
-            const response = await fetch('http://localhost:8000/interact_think_tank/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
-            displayAntwort(data, antwortDiv);
-
-        } catch (error) {
-            antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error;
-        }
-    }
-
-    // Antwort anzeigen (inklusive Code-Validierung)
-    function displayAntwort(data, antwortDiv) {
-        let discussionText = "<strong>Diskussionsverlauf:</strong><br><br>";
-
-        data.history.forEach((entry, index) => {
-            if (entry.role === "user") {
-                discussionText += `<b>👤 Du:</b> ${entry.response}<br><br>`;
-            } else {
-                discussionText += `🔹 <b>Agent ${entry.agent_id}:</b> ${entry.response}<br><br>`;
-            }
+        agenten.forEach(agent => {
+          const option = document.createElement('option');
+          option.value = agent.agent_id;
+          const expertiseFields = agent.expertise_fields && agent.expertise_fields.length > 0
+            ? agent.expertise_fields.join(', ')
+            : 'Keine Expertise-Felder verfügbar';
+          option.textContent = `${agent.name} - ${agent.description} | Expertise: ${expertiseFields}`;
+          agentenSelect.appendChild(option);
         });
 
-        // Code-Validierung: Falls Code angefordert, aber nicht geliefert wurde
-        if (data.error) {
-            discussionText += `<hr><strong style="color:red;">⚠️ Fehler:</strong> ${data.error}`;
-        } else {
-            discussionText += `<hr><strong>Finale Antwort:</strong> ${data.history[data.history.length - 1].response}`;
+      } catch (error) {
+        console.error('Fehler beim Laden der Agenten:', error);
+        agentenSelect.innerHTML = '<option>Fehler beim Laden der Agenten</option>';
+      }
+    };
+
+    // Startet eine neue Sitzung
+    async function frageSenden() {
+      const agentenSelect = document.getElementById('agentenSelect');
+      const frage = document.getElementById('frage').value;
+      const roundsInput = document.getElementById('rounds');
+      const antwortDiv = document.getElementById('antwort');
+
+      if (!agentenSelect || !roundsInput || !antwortDiv) {
+        alert("Wichtige Elemente wurden nicht gefunden!");
+        return;
+      }
+
+      let agent_ids = Array.from(agentenSelect.selectedOptions).map(option => option.value);
+      if (agent_ids.includes('alle')) {
+        agent_ids = null;  // Signalisiere, dass alle Agenten verwendet werden sollen
+      }
+
+      const rounds = parseInt(roundsInput.value);
+
+      if ((!agent_ids || (Array.isArray(agent_ids) && agent_ids.length === 0)) &&
+          !agentenSelect.querySelector('option[value="alle"]:checked')) {
+        alert("Bitte wähle mindestens ein Agenten oder 'Alle Agenten auswählen'!");
+        return;
+      }
+      if (!frage) {
+        alert("Bitte stelle eine Frage!");
+        return;
+      }
+      if (isNaN(rounds) || rounds <= 0) {
+        alert("Bitte gib eine gültige Anzahl an Runden an (muss eine positive Zahl sein)!");
+        return;
+      }
+
+      antwortDiv.innerHTML = "<strong>Diskussion startet...</strong><br>";
+
+      const requestBody = {
+        agent_ids: agent_ids,
+        query: frage,
+        rounds: rounds,
+        exit_session: false  // Sitzung soll gestartet werden
+      };
+
+      try {
+        const response = await fetch('http://localhost:8000/interact_think_tank/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorDetails = await response.json();
+          antwortDiv.innerHTML = `<strong>Fehler beim Starten der Diskussion:</strong><br>${errorDetails.detail || response.statusText}`;
+          return;
         }
 
-        antwortDiv.innerHTML = discussionText;
+        const data = await response.json();
+        aktuelleSitzung = data.session_id;  // Sitzung merken
+        startPolling(aktuelleSitzung);  // Polling starten
+        displayAntwort(data, antwortDiv);
+
+      } catch (error) {
+        antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error.message;
+        console.error("Fehler beim Senden der Anfrage:", error);
+      }
     }
-    </script>
+
+    // Funktion für Folgeanweisungen
+    async function folgeAnweisungSenden() {
+      const folgeFrage = document.getElementById('folgeFrage').value;
+      const antwortDiv = document.getElementById('antwort');
+
+      if (!aktuelleSitzung) {
+        alert("Keine aktive Sitzung gefunden. Bitte starte zuerst eine neue Diskussion.");
+        return;
+      }
+      if (!folgeFrage) {
+        alert("Bitte gib eine Folgeanweisung ein!");
+        return;
+      }
+
+      antwortDiv.innerHTML = "<strong>Verarbeite Folgeanweisung...</strong><br>";
+
+      const requestBody = {
+        session_id: aktuelleSitzung,
+        query: folgeFrage,
+        exit_session: false
+      };
+
+      try {
+        const response = await fetch('http://localhost:8000/interact_think_tank/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorDetails = await response.json();
+          antwortDiv.innerHTML = `<strong>Fehler bei der Folgeanweisung:</strong><br>${errorDetails.detail || response.statusText}`;
+          return;
+        }
+
+        const data = await response.json();
+        displayAntwort(data, antwortDiv);
+        document.getElementById('folgeFrage').value = '';
+
+      } catch (error) {
+        antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error.message;
+        console.error("Fehler beim Senden der Folgeanweisung:", error);
+      }
+    }
+
+    // Funktion zum Beenden der Sitzung
+    async function beendeSitzung() {
+      const antwortDiv = document.getElementById('antwort');
+      if (!aktuelleSitzung) {
+        alert("Keine aktive Sitzung gefunden!");
+        return;
+      }
+      const requestBody = {
+        session_id: aktuelleSitzung,
+        query: "",        // Kein neuer Input
+        exit_session: true  // Sitzung beenden
+      };
+
+      try {
+        const response = await fetch('http://localhost:8000/interact_think_tank/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorDetails = await response.json();
+          antwortDiv.innerHTML = `<strong>Fehler beim Beenden der Sitzung:</strong><br>${errorDetails.detail || response.statusText}`;
+          return;
+        }
+
+        const data = await response.json();
+        antwortDiv.innerHTML = `<strong>Sitzung beendet:</strong><br>${JSON.stringify(data.history)}`;
+        aktuelleSitzung = null;
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+        }
+      } catch (error) {
+        antwortDiv.innerHTML = '<strong>Fehler:</strong> ' + error.message;
+        console.error("Fehler beim Beenden der Sitzung:", error);
+      }
+    }
+
+    // Polling-Funktion zum regelmäßigen Abruf des aktuellen Sitzungsverlaufs
+    function startPolling(session_id) {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+      pollingInterval = setInterval(async () => {
+        if (!aktuelleSitzung) {
+          clearInterval(pollingInterval);
+          return;
+        }
+        try {
+          const requestBody = {
+            session_id: session_id,
+            query: "",         // Kein neuer Input, nur Statusabfrage
+            exit_session: false
+          };
+          const response = await fetch('http://localhost:8000/interact_think_tank/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+          if (!response.ok) {
+            console.error(`Fehler beim Polling: HTTP-Status ${response.status}`);
+            return;
+          }
+          const data = await response.json();
+          displayAntwort(data, document.getElementById('antwort'));
+          if (data.message && data.message.indexOf("Sitzung beendet") !== -1) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+            aktuelleSitzung = null;
+            console.log("Sitzung abgeschlossen (Polling gestoppt).");
+          }
+        } catch (error) {
+          console.error("Fehler beim Polling:", error);
+        }
+      }, 2000); // Alle 2 Sekunden
+      console.log(`Polling für Sitzung ${session_id} gestartet.`);
+    }
+
+    // Funktion zur Anzeige des Diskussionsverlaufs
+    function displayAntwort(data, antwortDiv) {
+      let discussionText = "<strong>Diskussionsverlauf:</strong><br><br>";
+      data.history.forEach(entry => {
+        if (entry.role === "user") {
+          discussionText += `<b>👤 Du:</b> ${entry.response}<br><br>`;
+        } else {
+          discussionText += `🔹 <b>Agent ${entry.agent_id}:</b> ${entry.response}<br><br>`;
+        }
+      });
+      if (data.error) {
+        discussionText += `<hr><strong style="color:red;">⚠️ Fehler:</strong> ${data.error}`;
+      }
+      antwortDiv.innerHTML = discussionText;
+      antwortDiv.scrollTop = antwortDiv.scrollHeight;
+    }
+  </script>
 </body>
 </html>
